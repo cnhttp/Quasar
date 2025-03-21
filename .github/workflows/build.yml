@@ -1,0 +1,33 @@
+name: Build Quasar
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.3.1
+
+      - name: Restore NuGet packages
+        run: nuget restore Quasar.sln
+
+      - name: Build solution
+        run: msbuild Quasar.sln /p:Configuration=Release /p:Platform="Any CPU"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quasar-Build
+          path: Quasar/bin/Release/
