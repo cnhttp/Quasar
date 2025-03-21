@@ -1,20 +1,32 @@
-version: BUILD{build}
+name: Build Quasar
 
-image: Visual Studio 2019
-shallow_clone: true
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
-configuration:
-- Debug
-- Release
+jobs:
+  build:
+    runs-on: windows-latest
 
-before_build:
-  - nuget restore
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-build:
-  project: Quasar.sln
-  parallel: true
-  verbosity: minimal
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.1
+        with:
+          vs-version: 'latest'
 
-artifacts:
-- path: Bin
-  name: binaries
+      - name: Restore NuGet packages
+        run: nuget restore Quasar.sln
+
+      - name: Build solution (Release)
+        run: msbuild Quasar.sln /p:Configuration=Release /p:Platform="Any CPU" /m
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: Quasar-Build
+          path: Bin/
