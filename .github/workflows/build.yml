@@ -31,3 +31,4 @@ jobs:
         with:
           name: Quasar-Build
           path: Quasar/bin/Release/*.*
+          upload-artifact: true
