@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
       - name: Checkout repository
@@ -24,10 +24,10 @@ jobs:
         run: nuget restore Quasar.sln
 
       - name: Build solution
-        run: msbuild Quasar.sln /p:Configuration=Release /p:Platform="Any CPU"
+        run: msbuild Quasar.sln /m /p:Configuration=Release /p:Platform=AnyCPU
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Quasar-Build
-          path: Quasar/bin/Release/
+          path: Quasar/bin/Release/*.*
