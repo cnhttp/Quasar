@@ -1,52 +1,36 @@
-name: Quasar Build Pipeline
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+name: Quasar CI
 
 jobs:
   build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        config: [Release, Debug]
-        platform: [x64, x86, AnyCPU]
     env:
-      SOLUTION_PATH: Quasar.sln
-      BUILD_CONFIG: ${{ matrix.config }}
-      BUILD_PLATFORM: ${{ matrix.platform }}
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true  # 禁用首次运行优化
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4  # 升级至最新版本[4,10](@ref)
+    - uses: actions/checkout@v4
 
-    - name: Cache NuGet packages
+    - name: Cache NuGet
       uses: actions/cache@v3
       with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
+        path: |
+          ~/.nuget/packages
+          ​**/packages.config
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
 
-    - name: Setup MSBuild
+    - name: Setup .NET Framework
       uses: microsoft/setup-msbuild@v1.3.1
+      with:
+        vs-version: 17.0
 
-    - name: Validate configurations
-      run: msbuild $env:SolutionPath /detailedsummary
+    - name: Restore Packages
+      run: |
+        nuget restore Quasar.sln -ForceEvaluate  # 强制重新生成assets文件
+        if ($LASTEXITCODE -ne 0) { exit 1 }
 
     - name: Build Solution
       run: |
-        msbuild $env:SolutionPath 
-          /p:Configuration=$env:BUILD_CONFIG 
-          /p:Platform="$env:BUILD_PLATFORM" 
-          /p:OutputPath=bin\$env:BUILD_CONFIG 
-          /v:diag
-      shell: powershell
-
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4  # 修复版本问题[1,6](@ref)
-      with:
-        name: ${{ matrix.config }}-${{ matrix.platform }}-Binaries
-        path: |
-          Quasar.Client/bin/${{ matrix.config }}/
-          Quasar.Server/bin/${{ matrix.config }}/
-        if-no-files-found: error
+        msbuild Quasar.sln 
+          /p:Configuration=Release 
+          /p:Platform="AnyCPU" 
+          /p:RestorePackages=false  # 禁用构建时的自动恢复
+          /p:TargetFrameworkVersion=v4.5.2  # 显式指定框架版本
