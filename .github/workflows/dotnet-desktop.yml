@@ -1,36 +1,69 @@
-name: Quasar CI
+name: .NET CI/CD Pipeline
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '**.sln'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 支持手动触发
+
+env:
+  SOLUTION: Quasar.sln
+  BUILD_CONFIGURATION: Release
+  DOTNET_VERSION: '4.8'  # 指定.NET Framework版本
 
 jobs:
-  build:
+  build-and-test:
     runs-on: windows-latest
-    env:
-      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true  # 禁用首次运行优化
+    strategy:
+      matrix:
+        platform: [x64, x86, AnyCPU]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4  # 升级到最新版本[2,6](@ref)
 
-    - name: Cache NuGet
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.3.1
+      with:
+        vs-version: '17.0'  # Visual Studio 2022构建工具[5](@ref)
+
+    - name: Cache NuGet packages
       uses: actions/cache@v3
       with:
         path: |
           ~/.nuget/packages
           ​**/packages.config
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
 
-    - name: Setup .NET Framework
-      uses: microsoft/setup-msbuild@v1.3.1
+    - name: Restore dependencies
+      run: |
+        nuget restore $env:SOLUTION -Source "https://api.nuget.org/v3/index.json"
+        if ($LASTEXITCODE -ne 0) { exit 1 }  # 强制错误处理[5](@ref)
+
+    - name: Build solution
+      run: |
+        msbuild $env:SOLUTION 
+          /p:Configuration=$env:BUILD_CONFIGURATION 
+          /p:Platform="${{ matrix.platform }}" 
+          /p:OutputPath=bin\$env:BUILD_CONFIGURATION 
+          /p:TargetFrameworkVersion=v4.5.2
+          /v:minimal
+        
+    - name: Run tests
+      if: matrix.platform == 'AnyCPU'  # 仅在AnyCPU平台执行测试[9](@ref)
+      run: |
+        vstest.console ​**\bin\$env:BUILD_CONFIGURATION\*Tests.dll
+        --Platform:${{ matrix.platform }}
+        --logger:"console;verbosity=normal"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
-        vs-version: 17.0
-
-    - name: Restore Packages
-      run: |
-        nuget restore Quasar.sln -ForceEvaluate  # 强制重新生成assets文件
-        if ($LASTEXITCODE -ne 0) { exit 1 }
-
-    - name: Build Solution
-      run: |
-        msbuild Quasar.sln 
-          /p:Configuration=Release 
-          /p:Platform="AnyCPU" 
-          /p:RestorePackages=false  # 禁用构建时的自动恢复
-          /p:TargetFrameworkVersion=v4.5.2  # 显式指定框架版本
+        name: ${{ matrix.platform }}-binaries
+        path: |
+          Quasar.Client/bin/$env:BUILD_CONFIGURATION/
+          Quasar.Server/bin/$env:BUILD_CONFIGURATION/
+        retention-days: 7  # 自动清理旧产物[5,7](@ref)
