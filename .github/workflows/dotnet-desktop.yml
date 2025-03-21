@@ -1,5 +1,4 @@
-name: Build Quasar RAT
-
+name: Quasar Build Pipeline
 on:
   push:
     branches: [ master ]
@@ -9,33 +8,45 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    permissions:
-      contents: read
+    strategy:
+      matrix:
+        config: [Release, Debug]
+        platform: [x64, x86, AnyCPU]
+    env:
+      SOLUTION_PATH: Quasar.sln
+      BUILD_CONFIG: ${{ matrix.config }}
+      BUILD_PLATFORM: ${{ matrix.platform }}
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # 升级至v4
-
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1.3.1
+      uses: actions/checkout@v4  # 升级至最新版本[4,10](@ref)
 
     - name: Cache NuGet packages
       uses: actions/cache@v3
       with:
         path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
 
-    - name: Restore NuGet Packages
-      run: nuget restore Quasar.sln
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.3.1
 
-    - name: Build Solution (Release)
-      run: msbuild Quasar.sln /p:Configuration=Release /p:Platform="Any CPU" /p:OutputPath=bin\Release
+    - name: Validate configurations
+      run: msbuild $env:SolutionPath /detailedsummary
+
+    - name: Build Solution
+      run: |
+        msbuild $env:SolutionPath 
+          /p:Configuration=$env:BUILD_CONFIG 
+          /p:Platform="$env:BUILD_PLATFORM" 
+          /p:OutputPath=bin\$env:BUILD_CONFIG 
+          /v:diag
+      shell: powershell
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v4  # 升级至v4
+      uses: actions/upload-artifact@v4  # 修复版本问题[1,6](@ref)
       with:
-        name: Quasar-Binaries
+        name: ${{ matrix.config }}-${{ matrix.platform }}-Binaries
         path: |
-          Quasar.Client/bin/Release/
-          Quasar.Server/bin/Release/
+          Quasar.Client/bin/${{ matrix.config }}/
+          Quasar.Server/bin/${{ matrix.config }}/
         if-no-files-found: error
